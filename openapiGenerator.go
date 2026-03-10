@@ -102,6 +102,12 @@ type openapiGenerator struct {
 	// we need to support this since some controllers marshal enums as integers and others as strings
 	enumAsIntOrString bool
 
+	// Strip enum type prefix from enum values (e.g., WEBHOOK_SCOPE_USER_CHAT_OPENED -> USER_CHAT_OPENED)
+	enumStripPrefix bool
+
+	// Skip UNSPECIFIED enum values (values ending with _UNSPECIFIED)
+	enumSkipUnspecified bool
+
 	// @solo.io customizations to define schemas for certain messages
 	customSchemasByMessageName map[string]openapi3.Schema
 
@@ -144,6 +150,8 @@ func newOpenAPIGenerator(
 	useRef bool,
 	descriptionConfiguration *DescriptionConfiguration,
 	enumAsIntOrString bool,
+	enumStripPrefix bool,
+	enumSkipUnspecified bool,
 	messagesWithEmptySchema []string,
 	protoOneof bool,
 	intNative bool,
@@ -163,6 +171,8 @@ func newOpenAPIGenerator(
 		useRef:                      useRef,
 		descriptionConfiguration:    descriptionConfiguration,
 		enumAsIntOrString:           enumAsIntOrString,
+		enumStripPrefix:             enumStripPrefix,
+		enumSkipUnspecified:         enumSkipUnspecified,
 		customSchemasByMessageName:  buildCustomSchemasByMessageName(messagesWithEmptySchema),
 		protoOneof:                  protoOneof,
 		intNative:                   intNative,
@@ -689,14 +699,45 @@ func (g *openapiGenerator) generateEnumSchema(enum *protomodel.EnumDescriptor) *
 		return o
 	}
 
+	// Build prefix to strip if enabled (e.g., "WebhookScope" -> "WEBHOOK_SCOPE_")
+	var prefix string
+	if g.enumStripPrefix {
+		prefix = toScreamingSnakeCase(enum.GetName()) + "_"
+	}
+
 	// otherwise, return define the expected string values
 	values := enum.GetValue()
 	for _, v := range values {
-		o.Enum = append(o.Enum, v.GetName())
+		name := v.GetName()
+
+		// Skip default enum value (0) if enabled - this is the UNSPECIFIED/UNKNOWN value in proto3
+		if g.enumSkipUnspecified && v.GetNumber() == 0 {
+			continue
+		}
+
+		// Strip prefix if enabled
+		if g.enumStripPrefix && strings.HasPrefix(name, prefix) {
+			name = strings.TrimPrefix(name, prefix)
+		}
+
+		o.Enum = append(o.Enum, name)
 	}
 	o.Type = &openapi3.Types{openapi3.TypeString}
 
 	return o
+}
+
+// toScreamingSnakeCase converts PascalCase to SCREAMING_SNAKE_CASE
+// e.g., "WebhookScope" -> "WEBHOOK_SCOPE"
+func toScreamingSnakeCase(s string) string {
+	var result strings.Builder
+	for i, r := range s {
+		if i > 0 && r >= 'A' && r <= 'Z' {
+			result.WriteRune('_')
+		}
+		result.WriteRune(r)
+	}
+	return strings.ToUpper(result.String())
 }
 
 func (g *openapiGenerator) absoluteName(desc protomodel.CoreDesc) string {
