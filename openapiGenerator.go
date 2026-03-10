@@ -111,6 +111,10 @@ type openapiGenerator struct {
 	// that add Kubernetes extension headers to the schema to treat int as strings.
 	intNative bool
 
+	// processingMessages tracks messages currently being processed to detect cycles
+	// and prevent stack overflow from recursive message types
+	processingMessages map[string]bool
+
 	markerRegistry *markers.Registry
 
 	// If set to true, kubebuilder markers and validations such as PreserveUnknownFields, MinItems, default, and all CEL rules will be omitted from the OpenAPI schema.
@@ -159,6 +163,7 @@ func newOpenAPIGenerator(
 		customSchemasByMessageName:  buildCustomSchemasByMessageName(messagesWithEmptySchema),
 		protoOneof:                  protoOneof,
 		intNative:                   intNative,
+		processingMessages:          make(map[string]bool),
 		markerRegistry:              mRegistry,
 		disableKubeMarkers:          disableKubeMarkers,
 		ignoredKubeMarkerSubstrings: ignoredKubeMarkers,
@@ -417,6 +422,16 @@ func (g *openapiGenerator) generateMessageSchema(message *protomodel.MessageDesc
 	if message.GetOptions().GetMapEntry() {
 		return nil
 	}
+
+	// Cycle detection: if we're already processing this message, return a simple object schema
+	// to break the infinite recursion caused by self-referential message types
+	msgName := g.absoluteName(message)
+	if g.processingMessages[msgName] {
+		return openapi3.NewObjectSchema()
+	}
+	g.processingMessages[msgName] = true
+	defer delete(g.processingMessages, msgName)
+
 	o := openapi3.NewObjectSchema()
 	o.Description = g.generateDescription(message)
 	msgRules := g.validationRules(message)
