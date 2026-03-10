@@ -52,6 +52,8 @@ func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorRes
 	includeDescription := true
 	multilineDescription := false
 	enumAsIntOrString := false
+	enumStripPrefix := false
+	enumSkipUnspecified := false
 	protoOneof := false
 	intNative := false
 	disableKubeMarkers := false
@@ -132,6 +134,24 @@ func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorRes
 			default:
 				return nil, fmt.Errorf("unknown value '%s' for enum_as_int_or_string", v)
 			}
+		} else if k == "enum_strip_prefix" {
+			switch strings.ToLower(v) {
+			case "true":
+				enumStripPrefix = true
+			case "false":
+				enumStripPrefix = false
+			default:
+				return nil, fmt.Errorf("unknown value '%s' for enum_strip_prefix", v)
+			}
+		} else if k == "enum_skip_unspecified" {
+			switch strings.ToLower(v) {
+			case "true":
+				enumSkipUnspecified = true
+			case "false":
+				enumSkipUnspecified = false
+			default:
+				return nil, fmt.Errorf("unknown value '%s' for enum_skip_unspecified", v)
+			}
 		} else if k == "proto_oneof" {
 			switch strings.ToLower(v) {
 			case "true":
@@ -199,6 +219,8 @@ func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorRes
 		useRef,
 		descriptionConfiguration,
 		enumAsIntOrString,
+		enumStripPrefix,
+		enumSkipUnspecified,
 		messagesWithEmptySchema,
 		protoOneof,
 		intNative,
