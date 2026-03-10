@@ -1,4 +1,4 @@
-module github.com/solo-io/protoc-gen-openapi
+module github.com/channel-io/ch-protoc-gen-openapi
 
 go 1.25.5
 

@@ -32,8 +32,8 @@ import (
 	"google.golang.org/protobuf/types/pluginpb"
 	kubemarkers "sigs.k8s.io/controller-tools/pkg/markers"
 
-	"github.com/solo-io/protoc-gen-openapi/pkg/markers"
-	"github.com/solo-io/protoc-gen-openapi/pkg/protomodel"
+	"github.com/channel-io/ch-protoc-gen-openapi/pkg/markers"
+	"github.com/channel-io/ch-protoc-gen-openapi/pkg/protomodel"
 )
 
 var descriptionExclusionMarkers = []string{"$hide_from_docs", "$hide", "@exclude"}

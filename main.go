@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/solo-io/protoc-gen-openapi/pkg/protocgen"
-	"github.com/solo-io/protoc-gen-openapi/pkg/protomodel"
+	"github.com/channel-io/ch-protoc-gen-openapi/pkg/protocgen"
+	"github.com/channel-io/ch-protoc-gen-openapi/pkg/protomodel"
 
 	"google.golang.org/protobuf/types/pluginpb"
 )
