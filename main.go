@@ -46,6 +46,7 @@ func extractParams(parameter string) map[string]string {
 func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorResponse, error) {
 	perFile := false
 	singleFile := false
+	splitSchemas := false
 	yaml := false
 	useRef := false
 	includeDescription := true
@@ -80,6 +81,18 @@ func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorRes
 				singleFile = false
 			default:
 				return nil, fmt.Errorf("unknown value '%s' for single_file", v)
+			}
+		} else if k == "split_schemas" {
+			switch strings.ToLower(v) {
+			case "true":
+				if perFile || singleFile {
+					return nil, fmt.Errorf("split_schemas cannot be combined with per_file or single_file")
+				}
+				splitSchemas = true
+			case "false":
+				splitSchemas = false
+			default:
+				return nil, fmt.Errorf("unknown value '%s' for split_schemas", v)
 			}
 		} else if k == "yaml" {
 			yaml = true
@@ -181,6 +194,7 @@ func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorRes
 		m,
 		perFile,
 		singleFile,
+		splitSchemas,
 		yaml,
 		useRef,
 		descriptionConfiguration,

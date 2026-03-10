@@ -81,12 +81,13 @@ var specialSoloTypes = map[string]openapi3.Schema{
 }
 
 type openapiGenerator struct {
-	buffer     bytes.Buffer
-	model      *protomodel.Model
-	perFile    bool
-	singleFile bool
-	yaml       bool
-	useRef     bool
+	buffer       bytes.Buffer
+	model        *protomodel.Model
+	perFile      bool
+	singleFile   bool
+	splitSchemas bool
+	yaml         bool
+	useRef       bool
 
 	// transient state as individual files are processed
 	currentPackage             *protomodel.PackageDescriptor
@@ -138,6 +139,7 @@ func newOpenAPIGenerator(
 	model *protomodel.Model,
 	perFile bool,
 	singleFile bool,
+	splitSchemas bool,
 	yaml bool,
 	useRef bool,
 	descriptionConfiguration *DescriptionConfiguration,
@@ -156,6 +158,7 @@ func newOpenAPIGenerator(
 		model:                       model,
 		perFile:                     perFile,
 		singleFile:                  singleFile,
+		splitSchemas:                splitSchemas,
 		yaml:                        yaml,
 		useRef:                      useRef,
 		descriptionConfiguration:    descriptionConfiguration,
@@ -201,7 +204,9 @@ func buildCustomSchemasByMessageName(messagesWithEmptySchema []string) map[strin
 func (g *openapiGenerator) generateOutput(filesToGen map[*protomodel.FileDescriptor]bool) (*pluginpb.CodeGeneratorResponse, error) {
 	response := pluginpb.CodeGeneratorResponse{}
 
-	if g.singleFile {
+	if g.splitSchemas {
+		g.generateSplitSchemasOutput(filesToGen, &response)
+	} else if g.singleFile {
 		g.generateSingleFileOutput(filesToGen, &response)
 	} else {
 		for _, pkg := range g.model.Packages {
@@ -280,6 +285,82 @@ func (g *openapiGenerator) generateSingleFileOutput(filesToGen map[*protomodel.F
 
 	rf := g.generateFile("openapiv3", &protomodel.FileDescriptor{}, messages, enums, services)
 	response.File = []*pluginpb.CodeGeneratorResponse_File{&rf}
+}
+
+// generateSplitSchemasOutput outputs each schema as a separate YAML file.
+// Each file contains only the schema definition (not wrapped in OpenAPI structure).
+// File names use short type names (e.g., "Bot.yaml" instead of "coreapi.model.Bot.yaml").
+func (g *openapiGenerator) generateSplitSchemasOutput(filesToGen map[*protomodel.FileDescriptor]bool, response *pluginpb.CodeGeneratorResponse) {
+	messages := make(map[string]*protomodel.MessageDescriptor)
+	enums := make(map[string]*protomodel.EnumDescriptor)
+	services := make(map[string]*protomodel.ServiceDescriptor)
+
+	for file, ok := range filesToGen {
+		if ok {
+			g.getFileContents(file, messages, enums, services)
+		}
+	}
+
+	g.messages = messages
+
+	// Generate individual files for each message
+	for _, message := range messages {
+		// only generate top-level messages (skip nested)
+		if message.Parent != nil {
+			continue
+		}
+		// skip MapEntry messages
+		if message.GetOptions().GetMapEntry() {
+			continue
+		}
+
+		schema := g.generateMessageSchema(message)
+		if schema == nil {
+			continue
+		}
+
+		rf := g.generateSchemaFile(protomodel.DottedName(message), schema)
+		response.File = append(response.File, &rf)
+	}
+
+	// Generate individual files for each enum
+	for _, enum := range enums {
+		// only generate top-level enums
+		if len(enum.QualifiedName()) != 1 {
+			continue
+		}
+
+		schema := g.generateEnumSchema(enum)
+		rf := g.generateSchemaFile(protomodel.DottedName(enum), schema)
+		response.File = append(response.File, &rf)
+	}
+}
+
+// generateSchemaFile creates a single file containing just the schema definition.
+func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Schema) pluginpb.CodeGeneratorResponse_File {
+	g.buffer.Reset()
+
+	var filename *string
+	if g.yaml {
+		b, err := yaml.Marshal(schema)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unable to marshall schema %v to yaml", name)
+		}
+		filename = proto.String(name + ".yaml")
+		g.buffer.Write(b)
+	} else {
+		b, err := json.MarshalIndent(schema, "", "  ")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "unable to marshall schema %v to json", name)
+		}
+		filename = proto.String(name + ".json")
+		g.buffer.Write(b)
+	}
+
+	return pluginpb.CodeGeneratorResponse_File{
+		Name:    filename,
+		Content: proto.String(g.buffer.String()),
+	}
 }
 
 func (g *openapiGenerator) generatePerPackageOutput(filesToGen map[*protomodel.FileDescriptor]bool, pkg *protomodel.PackageDescriptor,
