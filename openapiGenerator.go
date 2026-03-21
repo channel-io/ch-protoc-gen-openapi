@@ -27,6 +27,7 @@ import (
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/ghodss/yaml"
+	"github.com/iancoleman/strcase"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/descriptorpb"
 	"google.golang.org/protobuf/types/pluginpb"
@@ -715,9 +716,9 @@ func (g *openapiGenerator) generateEnumSchema(enum *protomodel.EnumDescriptor) *
 			continue
 		}
 
-		// Strip prefix if enabled
+		// Strip prefix and convert to lowerCamel if enabled
 		if g.enumStripPrefix && strings.HasPrefix(name, prefix) {
-			name = strings.TrimPrefix(name, prefix)
+			name = strcase.ToLowerCamel(strings.TrimPrefix(name, prefix))
 		}
 
 		o.Enum = append(o.Enum, name)
