@@ -1000,10 +1000,19 @@ func (g *openapiGenerator) fieldTypeRef(field *protomodel.FieldDescriptor) *open
 	} else if *field.Type == descriptorpb.FieldDescriptorProto_TYPE_ENUM && g.splitSchemas {
 		if len(field.FieldType.QualifiedName()) == 1 {
 			enumFileName := protomodel.DottedName(field.FieldType)
+			var enumRef string
 			if g.yaml {
-				ref = "./" + enumFileName + ".yaml"
+				enumRef = "./" + enumFileName + ".yaml"
 			} else {
-				ref = "./" + enumFileName + ".json"
+				enumRef = "./" + enumFileName + ".json"
+			}
+
+			if field.IsRepeated() {
+				// For repeated enum fields, set $ref on the array items, not the field itself.
+				// s is already an ArraySchema with Items set to the inline enum schema.
+				s.Items = openapi3.NewSchemaRef(enumRef, s.Items.Value)
+			} else {
+				ref = enumRef
 			}
 		}
 	}
