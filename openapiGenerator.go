@@ -95,6 +95,7 @@ type openapiGenerator struct {
 	currentFrontMatterProvider *protomodel.FileDescriptor
 
 	messages map[string]*protomodel.MessageDescriptor
+	enums    map[string]*protomodel.EnumDescriptor
 
 	// @solo.io customizations to limit length of generated descriptions
 	descriptionConfiguration *DescriptionConfiguration
@@ -313,6 +314,7 @@ func (g *openapiGenerator) generateSplitSchemasOutput(filesToGen map[*protomodel
 	}
 
 	g.messages = messages
+	g.enums = enums
 
 	// Generate individual files for each message
 	for _, message := range messages {
@@ -998,7 +1000,9 @@ func (g *openapiGenerator) fieldTypeRef(field *protomodel.FieldDescriptor) *open
 			ref = fmt.Sprintf("#/components/schemas/%v", g.absoluteName(field.FieldType))
 		}
 	} else if *field.Type == descriptorpb.FieldDescriptorProto_TYPE_ENUM && g.splitSchemas {
-		if len(field.FieldType.QualifiedName()) == 1 {
+		// Only generate $ref for enums that are in the generation target,
+		// mirroring the g.messages check for TYPE_MESSAGE above.
+		if _, ok := g.enums[g.relativeName(field.FieldType)]; ok && len(field.FieldType.QualifiedName()) == 1 {
 			enumFileName := protomodel.DottedName(field.FieldType)
 			var enumRef string
 			if g.yaml {
