@@ -95,6 +95,7 @@ type openapiGenerator struct {
 	currentFrontMatterProvider *protomodel.FileDescriptor
 
 	messages map[string]*protomodel.MessageDescriptor
+	enums    map[string]*protomodel.EnumDescriptor
 
 	// @solo.io customizations to limit length of generated descriptions
 	descriptionConfiguration *DescriptionConfiguration
@@ -313,6 +314,7 @@ func (g *openapiGenerator) generateSplitSchemasOutput(filesToGen map[*protomodel
 	}
 
 	g.messages = messages
+	g.enums = enums
 
 	// Generate individual files for each message
 	for _, message := range messages {
@@ -357,6 +359,11 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to marshall schema %v to yaml", name)
 		}
+		// In split_schemas mode, kin-openapi's SchemaRef.MarshalYAML drops Value
+		// (including nullable) when Ref is set. Restore nullable on $ref properties.
+		if g.splitSchemas {
+			b = restoreNullableOnRefProperties(b, schema)
+		}
 		filename = proto.String(name + ".yaml")
 		g.buffer.Write(b)
 	} else {
@@ -372,6 +379,50 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 		Name:    filename,
 		Content: proto.String(g.buffer.String()),
 	}
+}
+
+// restoreNullableOnRefProperties post-processes YAML output to add nullable: true
+// alongside $ref for enum properties that were nullable in the original schema.
+// This is needed because kin-openapi's SchemaRef.MarshalYAML ignores Value when Ref is set.
+func restoreNullableOnRefProperties(yamlBytes []byte, schema *openapi3.Schema) []byte {
+	if schema.Properties == nil {
+		return yamlBytes
+	}
+
+	needsFix := false
+	for _, propRef := range schema.Properties {
+		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
+			needsFix = true
+			break
+		}
+	}
+	if !needsFix {
+		return yamlBytes
+	}
+
+	var m map[string]interface{}
+	if err := yaml.Unmarshal(yamlBytes, &m); err != nil {
+		return yamlBytes
+	}
+
+	props, ok := m["properties"].(map[string]interface{})
+	if !ok {
+		return yamlBytes
+	}
+
+	for propName, propRef := range schema.Properties {
+		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
+			if propMap, ok := props[propName].(map[string]interface{}); ok {
+				propMap["nullable"] = true
+			}
+		}
+	}
+
+	b, err := yaml.Marshal(m)
+	if err != nil {
+		return yamlBytes
+	}
+	return b
 }
 
 func (g *openapiGenerator) generatePerPackageOutput(filesToGen map[*protomodel.FileDescriptor]bool, pkg *protomodel.PackageDescriptor,
@@ -559,7 +610,14 @@ func (g *openapiGenerator) generateMessageSchema(message *protomodel.MessageDesc
 
 		sr := g.fieldTypeRef(field)
 		g.mustApplyRulesToSchema(fieldRules, sr.Value, markers.TargetField)
-		o.WithProperty(fieldName, sr.Value)
+		if sr.Ref != "" && *field.Type == descriptorpb.FieldDescriptorProto_TYPE_ENUM {
+			// In split_schemas mode, reference top-level enums via $ref
+			// so that oapi-codegen deduplicates the type when the same enum
+			// is used in both model and request input schemas.
+			o.WithPropertyRef(fieldName, sr)
+		} else {
+			o.WithProperty(fieldName, sr.Value)
+		}
 	}
 
 	if len(requiredFields) > 0 {
@@ -940,6 +998,26 @@ func (g *openapiGenerator) fieldTypeRef(field *protomodel.FieldDescriptor) *open
 		// only generate `$ref` for top level messages.
 		if _, ok := g.messages[g.relativeName(field.FieldType)]; ok && msg.Parent == nil {
 			ref = fmt.Sprintf("#/components/schemas/%v", g.absoluteName(field.FieldType))
+		}
+	} else if *field.Type == descriptorpb.FieldDescriptorProto_TYPE_ENUM && g.splitSchemas {
+		// Only generate $ref for enums that are in the generation target,
+		// mirroring the g.messages check for TYPE_MESSAGE above.
+		if _, ok := g.enums[g.relativeName(field.FieldType)]; ok && len(field.FieldType.QualifiedName()) == 1 {
+			enumFileName := protomodel.DottedName(field.FieldType)
+			var enumRef string
+			if g.yaml {
+				enumRef = "./" + enumFileName + ".yaml"
+			} else {
+				enumRef = "./" + enumFileName + ".json"
+			}
+
+			if field.IsRepeated() {
+				// For repeated enum fields, set $ref on the array items, not the field itself.
+				// s is already an ArraySchema with Items set to the inline enum schema.
+				s.Items = openapi3.NewSchemaRef(enumRef, s.Items.Value)
+			} else {
+				ref = enumRef
+			}
 		}
 	}
 	return openapi3.NewSchemaRef(ref, s)
