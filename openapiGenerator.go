@@ -357,6 +357,11 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to marshall schema %v to yaml", name)
 		}
+		// In split_schemas mode, kin-openapi's SchemaRef.MarshalYAML drops Value
+		// (including nullable) when Ref is set. Restore nullable on $ref properties.
+		if g.splitSchemas {
+			b = restoreNullableOnRefProperties(b, schema)
+		}
 		filename = proto.String(name + ".yaml")
 		g.buffer.Write(b)
 	} else {
@@ -372,6 +377,50 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 		Name:    filename,
 		Content: proto.String(g.buffer.String()),
 	}
+}
+
+// restoreNullableOnRefProperties post-processes YAML output to add nullable: true
+// alongside $ref for enum properties that were nullable in the original schema.
+// This is needed because kin-openapi's SchemaRef.MarshalYAML ignores Value when Ref is set.
+func restoreNullableOnRefProperties(yamlBytes []byte, schema *openapi3.Schema) []byte {
+	if schema.Properties == nil {
+		return yamlBytes
+	}
+
+	needsFix := false
+	for _, propRef := range schema.Properties {
+		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
+			needsFix = true
+			break
+		}
+	}
+	if !needsFix {
+		return yamlBytes
+	}
+
+	var m map[string]interface{}
+	if err := yaml.Unmarshal(yamlBytes, &m); err != nil {
+		return yamlBytes
+	}
+
+	props, ok := m["properties"].(map[string]interface{})
+	if !ok {
+		return yamlBytes
+	}
+
+	for propName, propRef := range schema.Properties {
+		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
+			if propMap, ok := props[propName].(map[string]interface{}); ok {
+				propMap["nullable"] = true
+			}
+		}
+	}
+
+	b, err := yaml.Marshal(m)
+	if err != nil {
+		return yamlBytes
+	}
+	return b
 }
 
 func (g *openapiGenerator) generatePerPackageOutput(filesToGen map[*protomodel.FileDescriptor]bool, pkg *protomodel.PackageDescriptor,
