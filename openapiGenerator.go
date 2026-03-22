@@ -559,7 +559,14 @@ func (g *openapiGenerator) generateMessageSchema(message *protomodel.MessageDesc
 
 		sr := g.fieldTypeRef(field)
 		g.mustApplyRulesToSchema(fieldRules, sr.Value, markers.TargetField)
-		o.WithProperty(fieldName, sr.Value)
+		if sr.Ref != "" && *field.Type == descriptorpb.FieldDescriptorProto_TYPE_ENUM {
+			// In split_schemas mode, reference top-level enums via $ref
+			// so that oapi-codegen deduplicates the type when the same enum
+			// is used in both model and request input schemas.
+			o.WithPropertyRef(fieldName, sr)
+		} else {
+			o.WithProperty(fieldName, sr.Value)
+		}
 	}
 
 	if len(requiredFields) > 0 {
@@ -940,6 +947,15 @@ func (g *openapiGenerator) fieldTypeRef(field *protomodel.FieldDescriptor) *open
 		// only generate `$ref` for top level messages.
 		if _, ok := g.messages[g.relativeName(field.FieldType)]; ok && msg.Parent == nil {
 			ref = fmt.Sprintf("#/components/schemas/%v", g.absoluteName(field.FieldType))
+		}
+	} else if *field.Type == descriptorpb.FieldDescriptorProto_TYPE_ENUM && g.splitSchemas {
+		if len(field.FieldType.QualifiedName()) == 1 {
+			enumFileName := protomodel.DottedName(field.FieldType)
+			if g.yaml {
+				ref = "./" + enumFileName + ".yaml"
+			} else {
+				ref = "./" + enumFileName + ".json"
+			}
 		}
 	}
 	return openapi3.NewSchemaRef(ref, s)
