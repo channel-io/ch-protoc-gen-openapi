@@ -3,11 +3,31 @@ package markers
 import (
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"sigs.k8s.io/controller-tools/pkg/markers"
 )
+
+// patternValueRe matches the quoted value in a Pattern marker.
+var patternValueRe = regexp.MustCompile(`^(\+kubebuilder:validation:Pattern=")(.*)(")\s*$`)
+
+// escapePatternRule escapes backslashes inside Pattern marker values so that
+// controller-tools' marker parser (which uses Go strconv.Unquote) can parse
+// regex patterns containing literal backslashes (e.g. \S, \p{L}, \\).
+func escapePatternRule(rule string) string {
+	if !strings.Contains(rule, "Pattern=") {
+		return rule
+	}
+	m := patternValueRe.FindStringSubmatch(rule)
+	if m == nil {
+		return rule
+	}
+	// Double-escape backslashes in the pattern value so Unquote produces the original.
+	escaped := strings.ReplaceAll(m[2], `\`, `\\`)
+	return m[1] + escaped + m[3]
+}
 
 const (
 	// Kubebuilder marker used in comments
@@ -142,6 +162,7 @@ func (r *Registry) ApplyRulesToSchema(
 	target markers.TargetType,
 ) error {
 	for _, rule := range rules {
+		rule = escapePatternRule(rule)
 		defn := r.mRegistry.Lookup(rule, target)
 		if defn == nil {
 			return fmt.Errorf("no definition found for rule: %s", rule)
@@ -164,6 +185,7 @@ func (r *Registry) GetSchemaType(
 	target markers.TargetType,
 ) Type {
 	for _, rule := range rules {
+		rule = escapePatternRule(rule)
 		defn := r.mRegistry.Lookup(rule, target)
 		if defn == nil {
 			log.Panicf("no definition found for rule: %s", rule)
