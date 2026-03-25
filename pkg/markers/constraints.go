@@ -3,6 +3,7 @@ package markers
 import (
 	"log"
 	"math"
+	"strconv"
 
 	"github.com/getkin/kin-openapi/openapi3"
 )
@@ -303,7 +304,35 @@ type Example struct {
 }
 
 func (m Example) ApplyToSchema(o *openapi3.Schema) {
-	o.Example = m.Value
+	o.Example = coerceExampleValue(m.Value, o.Type)
+}
+
+// coerceExampleValue converts a marker value (typically parsed as a string)
+// to the appropriate Go type based on the OpenAPI schema type so that the
+// serialised YAML/JSON uses native scalars (true instead of "true", 42
+// instead of "42").
+func coerceExampleValue(v interface{}, schemaType *openapi3.Types) interface{} {
+	s, ok := v.(string)
+	if !ok || schemaType == nil || len(*schemaType) == 0 {
+		return v
+	}
+
+	t := (*schemaType)[0]
+	switch t {
+	case "boolean":
+		if b, err := strconv.ParseBool(s); err == nil {
+			return b
+		}
+	case "integer":
+		if i, err := strconv.ParseInt(s, 10, 64); err == nil {
+			return i
+		}
+	case "number":
+		if f, err := strconv.ParseFloat(s, 64); err == nil {
+			return f
+		}
+	}
+	return v
 }
 
 // Schemaless marks a field as being a schemaless object.
