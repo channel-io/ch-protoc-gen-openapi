@@ -31,6 +31,9 @@ components:
               - Forbid
               - Replace
               type: string
+            boolExample:
+              example: true
+              type: boolean
             c:
               maxLength: 100
               minLength: 1
@@ -46,6 +49,13 @@ components:
               nullable: true
               type: string
               x-kubernetes-embedded-resource: true
+            floatExample:
+              example: 3.14
+              type: number
+            intExample:
+              example: 42
+              format: int32
+              type: integer
             intOrString:
               type: string
               x-kubernetes-int-or-string: true
