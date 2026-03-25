@@ -56,6 +56,15 @@ message Msg {
     // +kubebuilder:validation:EmbeddedResource
     // +kubebuilder:validation:Nullable
     string embedded = 8;
+
+    // +kubebuilder:example="true"
+    bool bool_example = 9;
+
+    // +kubebuilder:example="42"
+    int32 int_example = 10;
+
+    // +kubebuilder:example="3.14"
+    float float_example = 11;
   }
 }
 
