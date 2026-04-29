@@ -139,6 +139,16 @@ func TestOpenAPIGeneration(t *testing.T) {
 			},
 			wantFiles: []string{"test10/openapiv3.yaml"},
 		},
+		{
+			name:       "Test kubebuilder:example on enum schema (type-level marker)",
+			id:         "test11",
+			perPackage: false,
+			genOpts:    "yaml=true,single_file=true,proto_oneof=true,int_native=true,multiline_description=true",
+			inputFiles: map[string][]string{
+				"test11": {"./testdata/test11/markers.proto"},
+			},
+			wantFiles: []string{"test11/openapiv3.yaml"},
+		},
 	}
 
 	for _, tc := range testcases {

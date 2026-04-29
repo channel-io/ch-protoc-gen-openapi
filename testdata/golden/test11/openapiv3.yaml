@@ -1,0 +1,33 @@
+components:
+  schemas:
+    test11.LogEntry:
+      description: A log entry referencing the Severity enum.
+      properties:
+        id:
+          example: req-abc123
+          type: string
+        severity:
+          enum:
+          - SEVERITY_UNSPECIFIED
+          - SEVERITY_DEBUG
+          - SEVERITY_INFO
+          - SEVERITY_WARN
+          - SEVERITY_ERROR
+          example: warn
+          type: string
+      type: object
+    test11.Severity:
+      description: Severity level for a log entry.
+      enum:
+      - SEVERITY_UNSPECIFIED
+      - SEVERITY_DEBUG
+      - SEVERITY_INFO
+      - SEVERITY_WARN
+      - SEVERITY_ERROR
+      example: warn
+      type: string
+info:
+  title: OpenAPI Spec for Solo APIs.
+  version: ""
+openapi: 3.0.1
+paths: null

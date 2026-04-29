@@ -750,6 +750,10 @@ func (g *openapiGenerator) generateEnumSchema(enum *protomodel.EnumDescriptor) *
 	o := openapi3.NewStringSchema()
 	o.Description = g.generateDescription(enum)
 
+	// Apply type-level markers (e.g. +kubebuilder:example=) declared on the enum block.
+	enumRules := g.validationRules(enum)
+	g.mustApplyRulesToSchema(enumRules, o, markers.TargetType)
+
 	// If the schema should be int or string, mark it as such
 	if g.enumAsIntOrString {
 		o.Extensions = map[string]interface{}{
