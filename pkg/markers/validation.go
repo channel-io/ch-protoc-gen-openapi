@@ -143,6 +143,13 @@ func init() {
 
 	AllDefinitions = append(AllDefinitions, FieldOnlyMarkers...)
 	AllDefinitions = append(AllDefinitions, ValidationIshMarkers...)
+
+	// kubebuilder:example is meaningful on both fields AND types (e.g. enum
+	// blocks). FieldOnlyMarkers registers the field-target version; add the
+	// type-target version so generators can apply it to type schemas.
+	AllDefinitions = append(AllDefinitions, must(
+		markers.MakeAnyTypeDefinition("kubebuilder:example", markers.DescribesType, Example{}),
+	))
 }
 
 func (r *Registry) MustApplyRulesToSchema(
