@@ -1,0 +1,51 @@
+components:
+  schemas:
+    test12.Container:
+      properties:
+        dayOfWeeks:
+          example:
+          - mon
+          - tue
+          - wed
+          items:
+            type: string
+          type: array
+        items:
+          example: []
+          items:
+            properties:
+              name:
+                type: string
+            type: object
+          type: array
+        numbers:
+          example:
+          - 1
+          - 2
+          - 3
+          items:
+            format: int32
+            type: integer
+          type: array
+        tags:
+          additionalProperties:
+            type: string
+          example: {}
+          type: object
+        windowsByEvent:
+          additionalProperties:
+            type: string
+          example:
+            sample: PT1H30M
+          type: object
+      type: object
+    test12.Item:
+      properties:
+        name:
+          type: string
+      type: object
+info:
+  title: OpenAPI Spec for Solo APIs.
+  version: ""
+openapi: 3.0.1
+paths: null

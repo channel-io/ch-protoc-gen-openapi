@@ -149,6 +149,16 @@ func TestOpenAPIGeneration(t *testing.T) {
 			},
 			wantFiles: []string{"test11/openapiv3.yaml"},
 		},
+		{
+			name:       "Test JSON literal enforcement for example marker",
+			id:         "test12",
+			perPackage: false,
+			genOpts:    "yaml=true,single_file=true,proto_oneof=true,int_native=true,multiline_description=true",
+			inputFiles: map[string][]string{
+				"test12": {"./testdata/test12/markers.proto"},
+			},
+			wantFiles: []string{"test12/openapiv3.yaml"},
+		},
 	}
 
 	for _, tc := range testcases {
