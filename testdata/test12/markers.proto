@@ -1,0 +1,24 @@
+syntax = "proto3";
+
+package test12;
+
+message Item {
+  string name = 1;
+}
+
+message Container {
+  // +kubebuilder:example=["mon","tue","wed"]
+  repeated string day_of_weeks = 1;
+
+  // +kubebuilder:example=[]
+  repeated Item items = 2;
+
+  // +kubebuilder:example={"sample":"PT1H30M"}
+  map<string, string> windows_by_event = 3;
+
+  // +kubebuilder:example=[1,2,3]
+  repeated int32 numbers = 4;
+
+  // +kubebuilder:example={}
+  map<string, string> tags = 5;
+}

@@ -1,6 +1,7 @@
 package markers
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"regexp"
@@ -24,9 +25,29 @@ func escapePatternRule(rule string) string {
 	if m == nil {
 		return rule
 	}
-	// Double-escape backslashes in the pattern value so Unquote produces the original.
 	escaped := strings.ReplaceAll(m[2], `\`, `\\`)
 	return m[1] + escaped + m[3]
+}
+
+const exampleMarkerPrefix = "+kubebuilder:example="
+
+func handleExampleJSONLiteral(rule string) (handled bool, value interface{}, err error) {
+	if !strings.HasPrefix(rule, exampleMarkerPrefix) {
+		return false, nil, nil
+	}
+	raw := strings.TrimSpace(strings.TrimPrefix(rule, exampleMarkerPrefix))
+	if raw == "" {
+		return false, nil, nil
+	}
+	first := raw[0]
+	if first != '[' && first != '{' {
+		return false, nil, nil
+	}
+	var parsed interface{}
+	if e := json.Unmarshal([]byte(raw), &parsed); e != nil {
+		return true, nil, fmt.Errorf("+kubebuilder:example= value must be valid JSON when using array (`[...]`) or object (`{...}`) literals, got %q: %w", raw, e)
+	}
+	return true, parsed, nil
 }
 
 const (
@@ -170,6 +191,13 @@ func (r *Registry) ApplyRulesToSchema(
 ) error {
 	for _, rule := range rules {
 		rule = escapePatternRule(rule)
+		if handled, value, err := handleExampleJSONLiteral(rule); handled {
+			if err != nil {
+				return err
+			}
+			Example{Value: value}.ApplyToSchema(o)
+			continue
+		}
 		defn := r.mRegistry.Lookup(rule, target)
 		if defn == nil {
 			return fmt.Errorf("no definition found for rule: %s", rule)
@@ -193,6 +221,12 @@ func (r *Registry) GetSchemaType(
 ) Type {
 	for _, rule := range rules {
 		rule = escapePatternRule(rule)
+		if handled, _, err := handleExampleJSONLiteral(rule); handled {
+			if err != nil {
+				log.Panicf("error parsing rule: %s", err)
+			}
+			continue
+		}
 		defn := r.mRegistry.Lookup(rule, target)
 		if defn == nil {
 			log.Panicf("no definition found for rule: %s", rule)
