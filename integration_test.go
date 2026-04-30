@@ -169,6 +169,16 @@ func TestOpenAPIGeneration(t *testing.T) {
 			},
 			wantFiles: []string{"test13/Item.yaml", "test13/Status.yaml"},
 		},
+		{
+			name:       "Test field-level example preserved on nested $ref properties (inline object and array items)",
+			id:         "test14",
+			perPackage: false,
+			genOpts:    "yaml=true,split_schemas=true,enum_strip_prefix=true,enum_skip_unspecified=true",
+			inputFiles: map[string][]string{
+				"test14": {"./testdata/test14/nested.proto"},
+			},
+			wantFiles: []string{"test14/Outer.yaml", "test14/Inner.yaml", "test14/Color.yaml"},
+		},
 	}
 
 	for _, tc := range testcases {

@@ -1,0 +1,7 @@
+properties:
+  color:
+    $ref: ./Color.yaml
+    example: red
+  id:
+    type: string
+type: object
