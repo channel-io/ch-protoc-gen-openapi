@@ -159,6 +159,16 @@ func TestOpenAPIGeneration(t *testing.T) {
 			},
 			wantFiles: []string{"test12/openapiv3.yaml"},
 		},
+		{
+			name:       "Test field-level example preserved on $ref properties (split_schemas)",
+			id:         "test13",
+			perPackage: false,
+			genOpts:    "yaml=true,split_schemas=true,include_description=true,enum_strip_prefix=true,enum_skip_unspecified=true",
+			inputFiles: map[string][]string{
+				"test13": {"./testdata/test13/markers.proto"},
+			},
+			wantFiles: []string{"test13/Item.yaml", "test13/Status.yaml"},
+		},
 	}
 
 	for _, tc := range testcases {

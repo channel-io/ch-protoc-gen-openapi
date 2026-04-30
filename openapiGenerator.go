@@ -360,9 +360,11 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 			fmt.Fprintf(os.Stderr, "unable to marshall schema %v to yaml", name)
 		}
 		// In split_schemas mode, kin-openapi's SchemaRef.MarshalYAML drops Value
-		// (including nullable) when Ref is set. Restore nullable on $ref properties.
+		// (including nullable and field-level example) when Ref is set. Restore
+		// them as siblings of $ref so downstream OpenAPI viewers see them.
 		if g.splitSchemas {
 			b = restoreNullableOnRefProperties(b, schema)
+			b = restoreFieldExampleOnRefProperties(b, schema)
 		}
 		filename = proto.String(name + ".yaml")
 		g.buffer.Write(b)
@@ -414,6 +416,53 @@ func restoreNullableOnRefProperties(yamlBytes []byte, schema *openapi3.Schema) [
 		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
 			if propMap, ok := props[propName].(map[string]interface{}); ok {
 				propMap["nullable"] = true
+			}
+		}
+	}
+
+	b, err := yaml.Marshal(m)
+	if err != nil {
+		return yamlBytes
+	}
+	return b
+}
+
+// restoreFieldExampleOnRefProperties post-processes YAML output to add
+// `example:` alongside `$ref` for properties that carried a field-level
+// +kubebuilder:example= marker before marshalling. kin-openapi's
+// SchemaRef.MarshalYAML drops Value (including Example) when Ref is set,
+// so per-usage example values would otherwise vanish in split_schemas
+// output for enum/message fields referenced via $ref.
+func restoreFieldExampleOnRefProperties(yamlBytes []byte, schema *openapi3.Schema) []byte {
+	if schema.Properties == nil {
+		return yamlBytes
+	}
+
+	needsFix := false
+	for _, propRef := range schema.Properties {
+		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Example != nil {
+			needsFix = true
+			break
+		}
+	}
+	if !needsFix {
+		return yamlBytes
+	}
+
+	var m map[string]interface{}
+	if err := yaml.Unmarshal(yamlBytes, &m); err != nil {
+		return yamlBytes
+	}
+
+	props, ok := m["properties"].(map[string]interface{})
+	if !ok {
+		return yamlBytes
+	}
+
+	for propName, propRef := range schema.Properties {
+		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Example != nil {
+			if propMap, ok := props[propName].(map[string]interface{}); ok {
+				propMap["example"] = propRef.Value.Example
 			}
 		}
 	}
