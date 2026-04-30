@@ -359,13 +359,6 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to marshall schema %v to yaml", name)
 		}
-		// In split_schemas mode, kin-openapi's SchemaRef.MarshalYAML drops Value
-		// (including nullable and field-level example) when Ref is set. Restore
-		// them as siblings of $ref so downstream OpenAPI viewers see them.
-		if g.splitSchemas {
-			b = restoreNullableOnRefProperties(b, schema)
-			b = restoreFieldExampleOnRefProperties(b, schema)
-		}
 		filename = proto.String(name + ".yaml")
 		g.buffer.Write(b)
 	} else {
@@ -380,143 +373,6 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 	return pluginpb.CodeGeneratorResponse_File{
 		Name:    filename,
 		Content: proto.String(g.buffer.String()),
-	}
-}
-
-// restoreNullableOnRefProperties post-processes YAML output to add nullable: true
-// alongside $ref for enum properties that were nullable in the original schema.
-// This is needed because kin-openapi's SchemaRef.MarshalYAML ignores Value when Ref is set.
-func restoreNullableOnRefProperties(yamlBytes []byte, schema *openapi3.Schema) []byte {
-	if schema.Properties == nil {
-		return yamlBytes
-	}
-
-	needsFix := false
-	for _, propRef := range schema.Properties {
-		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
-			needsFix = true
-			break
-		}
-	}
-	if !needsFix {
-		return yamlBytes
-	}
-
-	var m map[string]interface{}
-	if err := yaml.Unmarshal(yamlBytes, &m); err != nil {
-		return yamlBytes
-	}
-
-	props, ok := m["properties"].(map[string]interface{})
-	if !ok {
-		return yamlBytes
-	}
-
-	for propName, propRef := range schema.Properties {
-		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
-			if propMap, ok := props[propName].(map[string]interface{}); ok {
-				propMap["nullable"] = true
-			}
-		}
-	}
-
-	b, err := yaml.Marshal(m)
-	if err != nil {
-		return yamlBytes
-	}
-	return b
-}
-
-// restoreFieldExampleOnRefProperties post-processes YAML output to add
-// `example:` alongside `$ref` for properties that carried a field-level
-// +kubebuilder:example= marker before marshalling. kin-openapi's
-// SchemaRef.MarshalYAML drops Value (including Example) when Ref is set,
-// so per-usage example values would otherwise vanish in split_schemas
-// output for enum/message fields referenced via $ref.
-//
-// It walks the schema tree recursively so that $ref properties nested inside
-// inline object properties or array items are also restored. This matters
-// when a message type is inlined (split_schemas inlines non-enum messages
-// per-usage) and that inlined object contains enum fields referenced via $ref.
-func restoreFieldExampleOnRefProperties(yamlBytes []byte, schema *openapi3.Schema) []byte {
-	if !schemaHasRefExample(schema) {
-		return yamlBytes
-	}
-
-	var m map[string]interface{}
-	if err := yaml.Unmarshal(yamlBytes, &m); err != nil {
-		return yamlBytes
-	}
-
-	restoreRefExampleWalk(m, schema)
-
-	b, err := yaml.Marshal(m)
-	if err != nil {
-		return yamlBytes
-	}
-	return b
-}
-
-// schemaHasRefExample reports whether any property anywhere in the schema
-// subtree is a $ref carrying an Example that needs to be restored.
-func schemaHasRefExample(schema *openapi3.Schema) bool {
-	if schema == nil {
-		return false
-	}
-	for _, propRef := range schema.Properties {
-		if propRef == nil {
-			continue
-		}
-		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Example != nil {
-			return true
-		}
-		if propRef.Value != nil {
-			if schemaHasRefExample(propRef.Value) {
-				return true
-			}
-			if propRef.Value.Items != nil && propRef.Value.Items.Ref == "" &&
-				propRef.Value.Items.Value != nil &&
-				schemaHasRefExample(propRef.Value.Items.Value) {
-				return true
-			}
-		}
-	}
-	return false
-}
-
-// restoreRefExampleWalk walks the YAML node and the matching Go schema in
-// parallel, writing `example:` next to `$ref` wherever the schema carries
-// one. Recurses into inline object properties and into array items schemas.
-func restoreRefExampleWalk(yamlNode map[string]interface{}, schema *openapi3.Schema) {
-	if schema == nil || schema.Properties == nil {
-		return
-	}
-	props, ok := yamlNode["properties"].(map[string]interface{})
-	if !ok {
-		return
-	}
-	for propName, propRef := range schema.Properties {
-		if propRef == nil {
-			continue
-		}
-		propMap, ok := props[propName].(map[string]interface{})
-		if !ok {
-			continue
-		}
-		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Example != nil {
-			propMap["example"] = propRef.Value.Example
-		}
-		if propRef.Value == nil {
-			continue
-		}
-		if propRef.Value.Properties != nil {
-			restoreRefExampleWalk(propMap, propRef.Value)
-		}
-		if propRef.Value.Items != nil && propRef.Value.Items.Ref == "" && propRef.Value.Items.Value != nil {
-			if itemsMap, ok := propMap["items"].(map[string]interface{}); ok {
-				restoreRefExampleWalk(itemsMap, propRef.Value.Items.Value)
-			}
-		}
 	}
 }
 
@@ -601,7 +457,7 @@ func (g *openapiGenerator) generateFile(name string,
 	c.Schemas = allSchemas
 	// add the openapi object required by the spec.
 	o := openapi3.T{
-		OpenAPI: "3.0.1",
+		OpenAPI: "3.1.0",
 		Info: &openapi3.Info{
 			Title:   description,
 			Version: version,
