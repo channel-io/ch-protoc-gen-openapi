@@ -1,0 +1,17 @@
+properties:
+  history:
+    description: Historical status transitions.
+    example:
+    - draft
+    - active
+    items:
+      $ref: ./Status.yaml
+    type: array
+  id:
+    type: string
+  status:
+    $ref: ./Status.yaml
+    example: draft
+  statusWithoutExample:
+    $ref: ./Status.yaml
+type: object

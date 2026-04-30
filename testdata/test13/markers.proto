@@ -1,0 +1,28 @@
+syntax = "proto3";
+
+package test13;
+
+// Lifecycle status.
+enum Status {
+  STATUS_UNSPECIFIED = 0;
+  STATUS_DRAFT = 1;
+  STATUS_ACTIVE = 2;
+  STATUS_ARCHIVED = 3;
+}
+
+message Item {
+  string id = 1;
+
+  // Current status.
+  //
+  // +kubebuilder:example="draft"
+  Status status = 2;
+
+  // Same enum, no field-level example.
+  Status status_without_example = 3;
+
+  // Historical status transitions.
+  //
+  // +kubebuilder:example=["draft","active"]
+  repeated Status history = 4;
+}
