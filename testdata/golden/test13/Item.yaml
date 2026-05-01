@@ -10,7 +10,8 @@ properties:
   id:
     type: string
   status:
-    $ref: ./Status.yaml
+    allOf:
+    - $ref: ./Status.yaml
     example: draft
   statusWithoutExample:
     $ref: ./Status.yaml

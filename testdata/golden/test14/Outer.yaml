@@ -2,7 +2,8 @@ properties:
   inner:
     properties:
       color:
-        $ref: ./Color.yaml
+        allOf:
+        - $ref: ./Color.yaml
         example: red
       id:
         type: string
@@ -11,7 +12,8 @@ properties:
     items:
       properties:
         color:
-          $ref: ./Color.yaml
+          allOf:
+          - $ref: ./Color.yaml
           example: red
         id:
           type: string
