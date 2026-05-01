@@ -68,17 +68,30 @@ var specialSoloTypes = map[string]openapi3.Schema{
 			"x-kubernetes-preserve-unknown-fields": true,
 		},
 	},
-	"google.protobuf.BoolValue":   *openapi3.NewBoolSchema().WithNullable(),
-	"google.protobuf.StringValue": *openapi3.NewStringSchema().WithNullable(),
-	"google.protobuf.DoubleValue": *openapi3.NewFloat64Schema().WithNullable(),
-	"google.protobuf.Int32Value":  *openapi3.NewIntegerSchema().WithNullable().WithMin(math.MinInt32).WithMax(math.MaxInt32),
-	"google.protobuf.Int64Value":  *openapi3.NewIntegerSchema().WithNullable().WithMin(math.MinInt64).WithMax(math.MaxInt64),
-	"google.protobuf.UInt32Value": *openapi3.NewIntegerSchema().WithNullable().WithMin(0).WithMax(math.MaxUint32),
-	"google.protobuf.UInt64Value": *openapi3.NewIntegerSchema().WithNullable().WithMin(0).WithMax(math.MaxUint64),
-	"google.protobuf.FloatValue":  *openapi3.NewFloat64Schema().WithNullable(),
+	"google.protobuf.BoolValue":   nullableSchema(openapi3.NewBoolSchema()),
+	"google.protobuf.StringValue": nullableSchema(openapi3.NewStringSchema()),
+	"google.protobuf.DoubleValue": nullableSchema(openapi3.NewFloat64Schema()),
+	"google.protobuf.Int32Value":  nullableSchema(openapi3.NewIntegerSchema().WithMin(math.MinInt32).WithMax(math.MaxInt32)),
+	"google.protobuf.Int64Value":  nullableSchema(openapi3.NewIntegerSchema().WithMin(math.MinInt64).WithMax(math.MaxInt64)),
+	"google.protobuf.UInt32Value": nullableSchema(openapi3.NewIntegerSchema().WithMin(0).WithMax(math.MaxUint32)),
+	"google.protobuf.UInt64Value": nullableSchema(openapi3.NewIntegerSchema().WithMin(0).WithMax(math.MaxUint64)),
+	"google.protobuf.FloatValue":  nullableSchema(openapi3.NewFloat64Schema()),
 	"google.protobuf.Duration":    *openapi3.NewStringSchema(),
 	"google.protobuf.Empty":       *openapi3.NewObjectSchema().WithMaxProperties(0),
 	"google.protobuf.Timestamp":   *openapi3.NewStringSchema().WithFormat("date-time"),
+}
+
+// nullableSchema returns a 3.1-compliant nullable copy of the given schema by
+// appending `"null"` to the Type array. Under OAS 3.1 this is the canonical way
+// to express nullability (`Nullable: true` is a deprecated 3.0 construct that
+// kin-openapi still emits verbatim as `nullable: true`, which is invalid in 3.1).
+func nullableSchema(s *openapi3.Schema) openapi3.Schema {
+	if s.Type != nil && !s.Type.IncludesNull() {
+		types := append(openapi3.Types{}, *s.Type...)
+		types = append(types, openapi3.TypeNull)
+		s.Type = &types
+	}
+	return *s
 }
 
 type openapiGenerator struct {
@@ -360,10 +373,10 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 			fmt.Fprintf(os.Stderr, "unable to marshall schema %v to yaml", name)
 		}
 		// In split_schemas mode, kin-openapi's SchemaRef.MarshalYAML drops Value
-		// (including nullable and field-level example) when Ref is set. Restore
-		// them as siblings of $ref so downstream OpenAPI viewers see them.
+		// (including field-level example) when Ref is set, even under OAS 3.1
+		// where $ref siblings are allowed. Restore per-usage examples as
+		// siblings of $ref so downstream OpenAPI viewers see them.
 		if g.splitSchemas {
-			b = restoreNullableOnRefProperties(b, schema)
 			b = restoreFieldExampleOnRefProperties(b, schema)
 		}
 		filename = proto.String(name + ".yaml")
@@ -381,50 +394,6 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 		Name:    filename,
 		Content: proto.String(g.buffer.String()),
 	}
-}
-
-// restoreNullableOnRefProperties post-processes YAML output to add nullable: true
-// alongside $ref for enum properties that were nullable in the original schema.
-// This is needed because kin-openapi's SchemaRef.MarshalYAML ignores Value when Ref is set.
-func restoreNullableOnRefProperties(yamlBytes []byte, schema *openapi3.Schema) []byte {
-	if schema.Properties == nil {
-		return yamlBytes
-	}
-
-	needsFix := false
-	for _, propRef := range schema.Properties {
-		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
-			needsFix = true
-			break
-		}
-	}
-	if !needsFix {
-		return yamlBytes
-	}
-
-	var m map[string]interface{}
-	if err := yaml.Unmarshal(yamlBytes, &m); err != nil {
-		return yamlBytes
-	}
-
-	props, ok := m["properties"].(map[string]interface{})
-	if !ok {
-		return yamlBytes
-	}
-
-	for propName, propRef := range schema.Properties {
-		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Nullable {
-			if propMap, ok := props[propName].(map[string]interface{}); ok {
-				propMap["nullable"] = true
-			}
-		}
-	}
-
-	b, err := yaml.Marshal(m)
-	if err != nil {
-		return yamlBytes
-	}
-	return b
 }
 
 // restoreFieldExampleOnRefProperties post-processes YAML output to add
@@ -601,7 +570,7 @@ func (g *openapiGenerator) generateFile(name string,
 	c.Schemas = allSchemas
 	// add the openapi object required by the spec.
 	o := openapi3.T{
-		OpenAPI: "3.0.1",
+		OpenAPI: "3.1.0",
 		Info: &openapi3.Info{
 			Title:   description,
 			Version: version,

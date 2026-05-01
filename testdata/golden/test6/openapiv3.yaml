@@ -46,8 +46,9 @@ components:
               example: forty-two
               type: string
             embedded:
-              nullable: true
-              type: string
+              type:
+              - string
+              - "null"
               x-kubernetes-embedded-resource: true
             floatExample:
               example: 3.14
@@ -71,5 +72,5 @@ components:
 info:
   title: OpenAPI Spec for Solo APIs.
   version: ""
-openapi: 3.0.1
+openapi: 3.1.0
 paths: null
