@@ -140,16 +140,6 @@ func TestOpenAPIGeneration(t *testing.T) {
 			wantFiles: []string{"test10/openapiv3.yaml"},
 		},
 		{
-			name:       "Test kubebuilder:example on enum schema (type-level marker)",
-			id:         "test11",
-			perPackage: false,
-			genOpts:    "yaml=true,single_file=true,proto_oneof=true,int_native=true,multiline_description=true",
-			inputFiles: map[string][]string{
-				"test11": {"./testdata/test11/markers.proto"},
-			},
-			wantFiles: []string{"test11/openapiv3.yaml"},
-		},
-		{
 			name:       "Test JSON literal enforcement for example marker",
 			id:         "test12",
 			perPackage: false,
@@ -158,26 +148,6 @@ func TestOpenAPIGeneration(t *testing.T) {
 				"test12": {"./testdata/test12/markers.proto"},
 			},
 			wantFiles: []string{"test12/openapiv3.yaml"},
-		},
-		{
-			name:       "Test field-level example preserved on $ref properties (split_schemas)",
-			id:         "test13",
-			perPackage: false,
-			genOpts:    "yaml=true,split_schemas=true,include_description=true,enum_strip_prefix=true,enum_skip_unspecified=true",
-			inputFiles: map[string][]string{
-				"test13": {"./testdata/test13/markers.proto"},
-			},
-			wantFiles: []string{"test13/Item.yaml", "test13/Status.yaml"},
-		},
-		{
-			name:       "Test field-level example preserved on nested $ref properties (inline object and array items)",
-			id:         "test14",
-			perPackage: false,
-			genOpts:    "yaml=true,split_schemas=true,enum_strip_prefix=true,enum_skip_unspecified=true",
-			inputFiles: map[string][]string{
-				"test14": {"./testdata/test14/nested.proto"},
-			},
-			wantFiles: []string{"test14/Outer.yaml", "test14/Inner.yaml", "test14/Color.yaml"},
 		},
 	}
 

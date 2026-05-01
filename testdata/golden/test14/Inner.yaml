@@ -1,8 +1,0 @@
-properties:
-  color:
-    allOf:
-    - $ref: ./Color.yaml
-    example: red
-  id:
-    type: string
-type: object

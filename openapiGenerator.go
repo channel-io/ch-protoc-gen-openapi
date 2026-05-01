@@ -368,15 +368,6 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 
 	var filename *string
 	if g.yaml {
-		// kin-openapi's SchemaRef.MarshalYAML drops Value when Ref is set, even
-		// in OAS 3.1 where $ref siblings are allowed. Additionally, most
-		// renderers (Scalar, Redoc, Stoplight Elements) honour the 3.0 JSON
-		// Reference convention of ignoring $ref siblings. Wrap $ref properties
-		// carrying a field-level example in an allOf of one, so the example is
-		// a sibling of allOf instead of $ref — a form renderers preserve.
-		if g.splitSchemas {
-			wrapRefsWithSiblingsInAllOf(schema)
-		}
 		b, err := yaml.Marshal(schema)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "unable to marshall schema %v to yaml", name)
@@ -395,61 +386,6 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 	return pluginpb.CodeGeneratorResponse_File{
 		Name:    filename,
 		Content: proto.String(g.buffer.String()),
-	}
-}
-
-// wrapRefsWithSiblingsInAllOf walks the schema tree and converts any $ref
-// SchemaRef carrying a field-level Example into an allOf wrapper:
-//
-//	{Ref: "X", Value: {Example: "e"}}  ==>  {Value: {AllOf: [{Ref: "X"}], Example: "e"}}
-//
-// Renderers drop siblings of $ref but preserve siblings of allOf, so this
-// shape keeps field-level examples visible without relying on $ref sibling
-// support. It also bypasses kin-openapi's SchemaRef.MarshalYAML which drops
-// Value entirely when Ref is set.
-//
-// The resulting `allOf: [{$ref}] + docs-only siblings` shape is recognised
-// by oapi-codegen-exp V3's gather pass as an alias of the ref target (see
-// codegen/internal/gather.go:isSingletonAllOfRefAlias in our vendored
-// subtree), so the wrapper never competes with the target in V3's name
-// collision resolver and downstream Go builds see the bare target type
-// exactly as they would without the wrapping.
-//
-// Recurses into inline object properties and array items so that $ref
-// examples nested inside inlined message schemas are also wrapped.
-func wrapRefsWithSiblingsInAllOf(schema *openapi3.Schema) {
-	if schema == nil {
-		return
-	}
-	for propName, propRef := range schema.Properties {
-		if propRef == nil {
-			continue
-		}
-		if propRef.Ref != "" && propRef.Value != nil && propRef.Value.Example != nil {
-			schema.Properties[propName] = &openapi3.SchemaRef{
-				Value: &openapi3.Schema{
-					AllOf:   openapi3.SchemaRefs{{Ref: propRef.Ref}},
-					Example: propRef.Value.Example,
-				},
-			}
-			continue
-		}
-		if propRef.Value == nil {
-			continue
-		}
-		wrapRefsWithSiblingsInAllOf(propRef.Value)
-		if propRef.Value.Items != nil {
-			if propRef.Value.Items.Ref != "" && propRef.Value.Items.Value != nil && propRef.Value.Items.Value.Example != nil {
-				propRef.Value.Items = &openapi3.SchemaRef{
-					Value: &openapi3.Schema{
-						AllOf:   openapi3.SchemaRefs{{Ref: propRef.Value.Items.Ref}},
-						Example: propRef.Value.Items.Value.Example,
-					},
-				}
-			} else if propRef.Value.Items.Value != nil {
-				wrapRefsWithSiblingsInAllOf(propRef.Value.Items.Value)
-			}
-		}
 	}
 }
 
@@ -777,10 +713,6 @@ func (g *openapiGenerator) generateEnumSchema(enum *protomodel.EnumDescriptor) *
 	*/
 	o := openapi3.NewStringSchema()
 	o.Description = g.generateDescription(enum)
-
-	// Apply type-level markers (e.g. +kubebuilder:example=) declared on the enum block.
-	enumRules := g.validationRules(enum)
-	g.mustApplyRulesToSchema(enumRules, o, markers.TargetType)
 
 	// If the schema should be int or string, mark it as such
 	if g.enumAsIntOrString {
