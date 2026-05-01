@@ -408,6 +408,13 @@ func (g *openapiGenerator) generateSchemaFile(name string, schema *openapi3.Sche
 // support. It also bypasses kin-openapi's SchemaRef.MarshalYAML which drops
 // Value entirely when Ref is set.
 //
+// The resulting `allOf: [{$ref}] + docs-only siblings` shape is recognised
+// by oapi-codegen-exp V3's gather pass as an alias of the ref target (see
+// codegen/internal/gather.go:isSingletonAllOfRefAlias in our vendored
+// subtree), so the wrapper never competes with the target in V3's name
+// collision resolver and downstream Go builds see the bare target type
+// exactly as they would without the wrapping.
+//
 // Recurses into inline object properties and array items so that $ref
 // examples nested inside inlined message schemas are also wrapped.
 func wrapRefsWithSiblingsInAllOf(schema *openapi3.Schema) {
