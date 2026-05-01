@@ -1,6 +1,0 @@
-description: Lifecycle status.
-enum:
-- draft
-- active
-- archived
-type: string
