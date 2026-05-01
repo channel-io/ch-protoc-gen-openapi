@@ -269,10 +269,21 @@ func (x XValidation) ApplyToSchema(o *openapi3.Schema) {
 // Nullable marks this field as allowing the "null" value.
 //
 // This is often not necessary, but may be helpful with custom serialization.
+//
+// Emits OAS 3.1 syntax: appends "null" to the Type array (e.g. type: [string, null])
+// rather than the legacy `nullable: true` boolean which is invalid in 3.1.
 type Nullable struct{}
 
 func (m Nullable) ApplyToSchema(o *openapi3.Schema) {
-	o.WithNullable()
+	if o.Type == nil {
+		o.Type = &openapi3.Types{openapi3.TypeNull}
+		return
+	}
+	if !o.Type.IncludesNull() {
+		types := append(openapi3.Types{}, *o.Type...)
+		types = append(types, openapi3.TypeNull)
+		o.Type = &types
+	}
 }
 
 // Default sets the default value for this field.

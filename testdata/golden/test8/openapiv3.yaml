@@ -46,8 +46,9 @@ components:
               example: forty-two
               type: string
             embedded:
-              nullable: true
-              type: string
+              type:
+              - string
+              - "null"
               x-kubernetes-embedded-resource: true
             intOrString:
               type: string
