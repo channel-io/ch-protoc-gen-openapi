@@ -23,6 +23,7 @@ import (
 	"os"
 	"path"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/getkin/kin-openapi/openapi3"
@@ -123,6 +124,12 @@ type openapiGenerator struct {
 	// Skip UNSPECIFIED enum values (values ending with _UNSPECIFIED)
 	enumSkipUnspecified bool
 
+	// Rewrite proto snake_case field refs and SCREAMING_SNAKE enum refs in descriptions
+	// to their emitted camelCase forms (e.g., send_mode->sendMode, IN_OPERATION->inOperation).
+	rewriteDescriptionIdentifiers bool
+	identifierRewrites            map[string]string
+	identifierRewriteRe           *regexp.Regexp
+
 	// @solo.io customizations to define schemas for certain messages
 	customSchemasByMessageName map[string]openapi3.Schema
 
@@ -167,6 +174,7 @@ func newOpenAPIGenerator(
 	enumAsIntOrString bool,
 	enumStripPrefix bool,
 	enumSkipUnspecified bool,
+	rewriteDescriptionIdentifiers bool,
 	messagesWithEmptySchema []string,
 	protoOneof bool,
 	intNative bool,
@@ -178,23 +186,24 @@ func newOpenAPIGenerator(
 		log.Panicf("error initializing marker registry: %v", err)
 	}
 	return &openapiGenerator{
-		model:                       model,
-		perFile:                     perFile,
-		singleFile:                  singleFile,
-		splitSchemas:                splitSchemas,
-		yaml:                        yaml,
-		useRef:                      useRef,
-		descriptionConfiguration:    descriptionConfiguration,
-		enumAsIntOrString:           enumAsIntOrString,
-		enumStripPrefix:             enumStripPrefix,
-		enumSkipUnspecified:         enumSkipUnspecified,
-		customSchemasByMessageName:  buildCustomSchemasByMessageName(messagesWithEmptySchema),
-		protoOneof:                  protoOneof,
-		intNative:                   intNative,
-		processingMessages:          make(map[string]bool),
-		markerRegistry:              mRegistry,
-		disableKubeMarkers:          disableKubeMarkers,
-		ignoredKubeMarkerSubstrings: ignoredKubeMarkers,
+		model:                         model,
+		perFile:                       perFile,
+		singleFile:                    singleFile,
+		splitSchemas:                  splitSchemas,
+		yaml:                          yaml,
+		useRef:                        useRef,
+		descriptionConfiguration:      descriptionConfiguration,
+		enumAsIntOrString:             enumAsIntOrString,
+		enumStripPrefix:               enumStripPrefix,
+		enumSkipUnspecified:           enumSkipUnspecified,
+		rewriteDescriptionIdentifiers: rewriteDescriptionIdentifiers,
+		customSchemasByMessageName:    buildCustomSchemasByMessageName(messagesWithEmptySchema),
+		protoOneof:                    protoOneof,
+		intNative:                     intNative,
+		processingMessages:            make(map[string]bool),
+		markerRegistry:                mRegistry,
+		disableKubeMarkers:            disableKubeMarkers,
+		ignoredKubeMarkerSubstrings:   ignoredKubeMarkers,
 	}
 }
 
@@ -422,6 +431,10 @@ func (g *openapiGenerator) generateFile(name string,
 	_ map[string]*protomodel.ServiceDescriptor,
 ) pluginpb.CodeGeneratorResponse_File {
 	g.messages = messages
+	g.enums = enums
+	// Reset the identifier-rewrite cache so each output unit (file/package) recomputes it.
+	g.identifierRewrites = nil
+	g.identifierRewriteRe = nil
 
 	allSchemas := make(map[string]*openapi3.SchemaRef)
 
@@ -750,6 +763,75 @@ func (g *openapiGenerator) generateEnumSchema(enum *protomodel.EnumDescriptor) *
 	return o
 }
 
+// ensureIdentifierRewrites builds a rename map from the generator's known messages/enums.
+// Keys: proto snake_case field names and SCREAMING_SNAKE enum constant names (both full and
+// prefix-stripped). Values: their emitted camelCase forms. Built once and memoized.
+func (g *openapiGenerator) ensureIdentifierRewrites() {
+	if g.identifierRewrites != nil {
+		return
+	}
+	m := map[string]string{}
+
+	for _, msg := range g.messages {
+		for _, f := range msg.Fields {
+			from, to := f.GetName(), f.GetJsonName()
+			if from != "" && to != "" && from != to {
+				m[from] = to
+			}
+		}
+	}
+
+	for _, en := range g.enums {
+		if !g.enumStripPrefix {
+			continue
+		}
+		prefix := toScreamingSnakeCase(en.GetName()) + "_"
+		for _, v := range en.GetValue() {
+			full := v.GetName()
+			if !strings.HasPrefix(full, prefix) {
+				continue
+			}
+			stripped := strings.TrimPrefix(full, prefix)
+			camel := strcase.ToLowerCamel(stripped)
+			if stripped != camel {
+				m[stripped] = camel
+				m[full] = camel
+			}
+		}
+	}
+
+	g.identifierRewrites = m
+	if len(m) == 0 {
+		return
+	}
+
+	// Longest keys first so longer tokens match before shorter prefixes in the alternation.
+	alts := make([]string, 0, len(m))
+	for k := range m {
+		alts = append(alts, regexp.QuoteMeta(k))
+	}
+	sort.Slice(alts, func(i, j int) bool { return len(alts[i]) > len(alts[j]) })
+	g.identifierRewriteRe = regexp.MustCompile(`\b(?:` + strings.Join(alts, "|") + `)\b`)
+}
+
+// applyIdentifierRewrites replaces proto-native identifiers in a description string
+// with their REST/JSON emitted forms. No-op unless rewriteDescriptionIdentifiers is set.
+func (g *openapiGenerator) applyIdentifierRewrites(s string) string {
+	if !g.rewriteDescriptionIdentifiers || s == "" {
+		return s
+	}
+	g.ensureIdentifierRewrites()
+	if g.identifierRewriteRe == nil {
+		return s
+	}
+	return g.identifierRewriteRe.ReplaceAllStringFunc(s, func(tok string) string {
+		if r, ok := g.identifierRewrites[tok]; ok {
+			return r
+		}
+		return tok
+	})
+}
+
 // toScreamingSnakeCase converts PascalCase to SCREAMING_SNAKE_CASE
 // e.g., "WebhookScope" -> "WEBHOOK_SCOPE"
 func toScreamingSnakeCase(s string) string {
@@ -786,7 +868,7 @@ func (g *openapiGenerator) generateDescription(desc protomodel.CoreDesc) string 
 		return ""
 	}
 
-	return strings.Join(strings.Fields(t), " ")
+	return g.applyIdentifierRewrites(strings.Join(strings.Fields(t), " "))
 }
 
 func (g *openapiGenerator) generateMultiLineDescription(desc protomodel.CoreDesc) string {
@@ -794,7 +876,7 @@ func (g *openapiGenerator) generateMultiLineDescription(desc protomodel.CoreDesc
 		return ""
 	}
 	comments, _ := g.parseComments(desc)
-	return comments
+	return g.applyIdentifierRewrites(comments)
 }
 
 func (g *openapiGenerator) mustApplyRulesToSchema(
