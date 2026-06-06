@@ -431,6 +431,10 @@ func (g *openapiGenerator) generateFile(name string,
 	_ map[string]*protomodel.ServiceDescriptor,
 ) pluginpb.CodeGeneratorResponse_File {
 	g.messages = messages
+	g.enums = enums
+	// Reset the identifier-rewrite cache so each output unit (file/package) recomputes it.
+	g.identifierRewrites = nil
+	g.identifierRewriteRe = nil
 
 	allSchemas := make(map[string]*openapi3.SchemaRef)
 
