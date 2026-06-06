@@ -124,6 +124,9 @@ type openapiGenerator struct {
 	// Skip UNSPECIFIED enum values (values ending with _UNSPECIFIED)
 	enumSkipUnspecified bool
 
+	// Emit an x-enum-descriptions map (enum value -> description) on enum schemas
+	includeEnumDescriptions bool
+
 	// Rewrite proto snake_case field refs and SCREAMING_SNAKE enum refs in descriptions
 	// to their emitted camelCase forms (e.g., send_mode->sendMode, IN_OPERATION->inOperation).
 	rewriteDescriptionIdentifiers bool
@@ -174,6 +177,7 @@ func newOpenAPIGenerator(
 	enumAsIntOrString bool,
 	enumStripPrefix bool,
 	enumSkipUnspecified bool,
+	includeEnumDescriptions bool,
 	rewriteDescriptionIdentifiers bool,
 	messagesWithEmptySchema []string,
 	protoOneof bool,
@@ -196,6 +200,7 @@ func newOpenAPIGenerator(
 		enumAsIntOrString:             enumAsIntOrString,
 		enumStripPrefix:               enumStripPrefix,
 		enumSkipUnspecified:           enumSkipUnspecified,
+		includeEnumDescriptions:       includeEnumDescriptions,
 		rewriteDescriptionIdentifiers: rewriteDescriptionIdentifiers,
 		customSchemasByMessageName:    buildCustomSchemasByMessageName(messagesWithEmptySchema),
 		protoOneof:                    protoOneof,
@@ -742,7 +747,12 @@ func (g *openapiGenerator) generateEnumSchema(enum *protomodel.EnumDescriptor) *
 	}
 
 	// otherwise, return define the expected string values
-	values := enum.GetValue()
+	values := enum.Values
+	var enumDescriptions map[string]string
+	allValuesDescribed := true
+	if g.includeEnumDescriptions {
+		enumDescriptions = make(map[string]string, len(values))
+	}
 	for _, v := range values {
 		name := v.GetName()
 
@@ -757,8 +767,23 @@ func (g *openapiGenerator) generateEnumSchema(enum *protomodel.EnumDescriptor) *
 		}
 
 		o.Enum = append(o.Enum, name)
+
+		if g.includeEnumDescriptions {
+			d := g.generateDescription(v)
+			if d == "" {
+				allValuesDescribed = false
+			}
+			enumDescriptions[name] = d
+		}
 	}
 	o.Type = &openapi3.Types{openapi3.TypeString}
+
+	// Only emit when every emitted value is described, so keys(x-enum-descriptions) == set(enum).
+	if g.includeEnumDescriptions && allValuesDescribed && len(enumDescriptions) > 0 {
+		o.Extensions = map[string]interface{}{
+			"x-enum-descriptions": enumDescriptions,
+		}
+	}
 
 	return o
 }

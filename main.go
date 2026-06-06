@@ -54,6 +54,7 @@ func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorRes
 	enumAsIntOrString := false
 	enumStripPrefix := false
 	enumSkipUnspecified := false
+	includeEnumDescriptions := false
 	rewriteDescriptionIdentifiers := false
 	protoOneof := false
 	intNative := false
@@ -153,6 +154,15 @@ func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorRes
 			default:
 				return nil, fmt.Errorf("unknown value '%s' for enum_skip_unspecified", v)
 			}
+		} else if k == "include_enum_descriptions" {
+			switch strings.ToLower(v) {
+			case "true":
+				includeEnumDescriptions = true
+			case "false":
+				includeEnumDescriptions = false
+			default:
+				return nil, fmt.Errorf("unknown value '%s' for include_enum_descriptions", v)
+			}
 		} else if k == "rewrite_description_identifiers" {
 			switch strings.ToLower(v) {
 			case "true":
@@ -231,6 +241,7 @@ func generate(request pluginpb.CodeGeneratorRequest) (*pluginpb.CodeGeneratorRes
 		enumAsIntOrString,
 		enumStripPrefix,
 		enumSkipUnspecified,
+		includeEnumDescriptions,
 		rewriteDescriptionIdentifiers,
 		messagesWithEmptySchema,
 		protoOneof,

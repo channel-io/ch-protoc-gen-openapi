@@ -1,0 +1,16 @@
+components:
+  schemas:
+    test13.WebhookScope:
+      description: Scope of the webhook subscription.
+      enum:
+      - userChatOpened
+      - userChatClosed
+      type: string
+      x-enum-descriptions:
+        userChatClosed: Fired when a user chat is closed.
+        userChatOpened: Fired when a user chat is opened.
+info:
+  title: OpenAPI Spec for Solo APIs.
+  version: ""
+openapi: 3.1.0
+paths: null

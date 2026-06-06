@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package test13;
+
+// Scope of the webhook subscription.
+enum WebhookScope {
+  // Never emitted; the default unset value.
+  WEBHOOK_SCOPE_UNSPECIFIED = 0;
+  // Fired when a user chat is opened.
+  WEBHOOK_SCOPE_USER_CHAT_OPENED = 1;
+  // Fired when a user chat is closed.
+  WEBHOOK_SCOPE_USER_CHAT_CLOSED = 2;
+}

@@ -149,6 +149,16 @@ func TestOpenAPIGeneration(t *testing.T) {
 			},
 			wantFiles: []string{"test12/openapiv3.yaml"},
 		},
+		{
+			name:       "Test include_enum_descriptions emits x-enum-descriptions",
+			id:         "test13",
+			perPackage: false,
+			genOpts:    "yaml=true,single_file=true,enum_strip_prefix=true,enum_skip_unspecified=true,include_enum_descriptions=true",
+			inputFiles: map[string][]string{
+				"test13": {"./testdata/test13/webhook.proto"},
+			},
+			wantFiles: []string{"test13/openapiv3.yaml"},
+		},
 	}
 
 	for _, tc := range testcases {
