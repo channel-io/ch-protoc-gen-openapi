@@ -149,6 +149,16 @@ func TestOpenAPIGeneration(t *testing.T) {
 			},
 			wantFiles: []string{"test12/openapiv3.yaml"},
 		},
+		{
+			name:       "Split schemas use recursive message refs",
+			id:         "test13",
+			perPackage: false,
+			genOpts:    "yaml=true,split_schemas=true",
+			inputFiles: map[string][]string{
+				"test13": {"./testdata/test13/recursive.proto"},
+			},
+			wantFiles: []string{"test13/Block.yaml"},
+		},
 	}
 
 	for _, tc := range testcases {

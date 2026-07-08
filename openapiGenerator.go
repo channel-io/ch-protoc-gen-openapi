@@ -587,10 +587,7 @@ func (g *openapiGenerator) generateMessageSchema(message *protomodel.MessageDesc
 
 		sr := g.fieldTypeRef(field)
 		g.mustApplyRulesToSchema(fieldRules, sr.Value, markers.TargetField)
-		if sr.Ref != "" && *field.Type == descriptorpb.FieldDescriptorProto_TYPE_ENUM {
-			// In split_schemas mode, reference top-level enums via $ref
-			// so that oapi-codegen deduplicates the type when the same enum
-			// is used in both model and request input schemas.
+		if g.shouldUsePropertyRef(field, sr) {
 			o.WithPropertyRef(fieldName, sr)
 		} else {
 			o.WithProperty(fieldName, sr.Value)
@@ -1037,6 +1034,19 @@ func (g *openapiGenerator) fieldType(field *protomodel.FieldDescriptor) *openapi
 
 // fieldTypeRef generates the `$ref` in addition to the schema for a field.
 func (g *openapiGenerator) fieldTypeRef(field *protomodel.FieldDescriptor) *openapi3.SchemaRef {
+	if ref, ok := g.recursiveMessageFieldRef(field); ok {
+		if field.IsRepeated() {
+			s := openapi3.NewArraySchema()
+			s.Items = openapi3.NewSchemaRef(ref, nil)
+			s.Description = g.generateDescription(field)
+			return openapi3.NewSchemaRef("", s)
+		}
+
+		s := openapi3.NewObjectSchema()
+		s.Description = g.generateDescription(field)
+		return openapi3.NewSchemaRef(ref, s)
+	}
+
 	s := g.fieldType(field)
 	var ref string
 	if *field.Type == descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
@@ -1067,6 +1077,52 @@ func (g *openapiGenerator) fieldTypeRef(field *protomodel.FieldDescriptor) *open
 		}
 	}
 	return openapi3.NewSchemaRef(ref, s)
+}
+
+func (g *openapiGenerator) shouldUsePropertyRef(field *protomodel.FieldDescriptor, sr *openapi3.SchemaRef) bool {
+	if sr.Ref == "" {
+		return false
+	}
+	if *field.Type == descriptorpb.FieldDescriptorProto_TYPE_ENUM {
+		return true
+	}
+	if *field.Type != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+		return false
+	}
+
+	_, ok := g.recursiveMessageFieldRef(field)
+	return ok
+}
+
+func (g *openapiGenerator) recursiveMessageFieldRef(field *protomodel.FieldDescriptor) (string, bool) {
+	if *field.Type != descriptorpb.FieldDescriptorProto_TYPE_MESSAGE {
+		return "", false
+	}
+
+	msg := field.FieldType.(*protomodel.MessageDescriptor)
+	if msg.Parent != nil {
+		return "", false
+	}
+	if _, ok := g.messages[g.relativeName(field.FieldType)]; !ok {
+		return "", false
+	}
+	if !g.processingMessages[g.absoluteName(msg)] {
+		return "", false
+	}
+
+	return g.messageSchemaRef(field.FieldType), true
+}
+
+func (g *openapiGenerator) messageSchemaRef(desc protomodel.CoreDesc) string {
+	if g.splitSchemas {
+		extension := ".json"
+		if g.yaml {
+			extension = ".yaml"
+		}
+		return "./" + protomodel.DottedName(desc) + extension
+	}
+
+	return fmt.Sprintf("#/components/schemas/%v", g.absoluteName(desc))
 }
 
 func (g *openapiGenerator) fieldName(field *protomodel.FieldDescriptor) string {
