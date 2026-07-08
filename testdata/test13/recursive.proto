@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package test13;
+
+message Block {
+  repeated Block blocks = 1;
+  string value = 2;
+}
+
+message Node {
+  // Recursive child node.
+  //
+  // +kubebuilder:validation:XValidation:rule="self.value != ''"
+  Node child = 1;
+  string value = 2;
+}

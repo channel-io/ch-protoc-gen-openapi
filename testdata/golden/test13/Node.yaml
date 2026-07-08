@@ -1,0 +1,10 @@
+properties:
+  child:
+    allOf:
+    - $ref: ./Node.yaml
+    description: Recursive child node.
+    x-kubernetes-validations:
+    - rule: self.value != ''
+  value:
+    type: string
+type: object

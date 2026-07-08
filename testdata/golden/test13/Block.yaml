@@ -1,0 +1,8 @@
+properties:
+  blocks:
+    items:
+      $ref: ./Block.yaml
+    type: array
+  value:
+    type: string
+type: object
