@@ -1042,9 +1042,10 @@ func (g *openapiGenerator) fieldTypeRef(field *protomodel.FieldDescriptor) *open
 			return openapi3.NewSchemaRef("", s)
 		}
 
-		s := openapi3.NewObjectSchema()
+		s := openapi3.NewSchema()
+		s.AllOf = openapi3.SchemaRefs{openapi3.NewSchemaRef(ref, nil)}
 		s.Description = g.generateDescription(field)
-		return openapi3.NewSchemaRef(ref, s)
+		return openapi3.NewSchemaRef("", s)
 	}
 
 	s := g.fieldType(field)

@@ -157,7 +157,7 @@ func TestOpenAPIGeneration(t *testing.T) {
 			inputFiles: map[string][]string{
 				"test13": {"./testdata/test13/recursive.proto"},
 			},
-			wantFiles: []string{"test13/Block.yaml"},
+			wantFiles: []string{"test13/Block.yaml", "test13/Node.yaml"},
 		},
 	}
 
