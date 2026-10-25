@@ -1,6 +1,6 @@
 module github.com/channel-io/ch-protoc-gen-openapi
 
-go 1.25.5
+go 1.26.10
 
 require (
 	github.com/getkin/kin-openapi v0.137.0
